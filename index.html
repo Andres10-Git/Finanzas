@@ -77,12 +77,13 @@ var $=function(s){return document.querySelector(s)};
 var S={tx:[],goals:[],budgets:{}},tab='home',draft='gasto';
 try{var r=localStorage.getItem('finanzas-v1');if(r){S=JSON.parse(r)}}catch(e){}
 S.budgets=S.budgets||{};
+function defCats(){return{gasto:['Comida','Transporte','Vivienda','Estudio','Ocio','Salud','Otros'],ingreso:['Mesada','Salario','Trabajo extra','Otros']}}
+if(!S.cats||!Array.isArray(S.cats.gasto)||!Array.isArray(S.cats.ingreso)){S.cats=defCats()}
 function save(){try{localStorage.setItem('finanzas-v1',JSON.stringify(S))}catch(e){}}
 var today=function(){return new Date().toLocaleDateString('sv')};
 var cur=today().slice(0,7);
 var fmt=function(n){return new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(n)};
 var esc=function(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};
-var CATS={gasto:['Comida','Transporte','Vivienda','Estudio','Ocio','Salud','Otros'],ingreso:['Mesada','Salario','Trabajo extra','Otros']};
 var sum=function(a,t){return a.filter(function(x){return x.type===t}).reduce(function(s,x){return s+x.amt},0)};
 function go(t){tab=t;render()}
 function mv(d){var p=cur.split('-').map(Number),y=p[0],m=p[1]+d;if(m>12){m=1;y++}if(m<1){m=12;y--}cur=y+'-'+String(m).padStart(2,'0');render()}
@@ -116,7 +117,7 @@ h='<h1>Mis ahorros</h1><div class="card"><div class="sub">Total ahorrado</div><d
 h+=S.goals.length?S.goals.map(function(g){var p=g.target>0?Math.min(g.saved/g.target*100,100):0;
 return '<div class="card"><div style="display:flex;justify-content:space-between"><b>'+esc(g.name)+'</b><button class="x" onclick="delGoal(\''+g.id+'\')" aria-label="Eliminar meta">✕</button></div><div class="sub">'+fmt(g.saved)+' de '+fmt(g.target)+' ('+Math.round(p)+'%)</div><div class="pg" style="margin-top:8px;height:10px"><i style="width:'+p+'%;background:var(--sav)"></i></div><div class="acts"><button class="btn s" onclick="sheetFund(\''+g.id+'\',1)">Abonar</button><button class="btn s o" onclick="sheetFund(\''+g.id+'\',-1)">Retirar</button></div></div>'}).join(''):'<div class="empty">Crea una meta, por ejemplo “Laptop” o “Viaje”, y abónale cuando puedas.</div>';
 }else{
-h='<h1>Ajustes</h1><div class="card"><b>Presupuesto mensual por categoría</b><div class="sub">Déjalo vacío si no quieres límite en esa categoría.</div>'+CATS.gasto.map(function(c,i){return '<label>'+c+' (COP)</label><input id="bd'+i+'" type="number" inputmode="decimal" value="'+(S.budgets[c]||'')+'">'}).join('')+'<div style="height:12px"></div><button class="btn" onclick="saveBudgets()">Guardar presupuestos</button></div>'
+h='<h1>Ajustes</h1>'+catCard('gasto')+catCard('ingreso')+'<div class="card"><b>Presupuesto mensual por categoría</b><div class="sub">Déjalo vacío si no quieres límite en esa categoría.</div>'+S.cats.gasto.map(function(c,i){return '<label>'+c+' (COP)</label><input id="bd'+i+'" type="number" inputmode="decimal" value="'+(S.budgets[c]||'')+'">'}).join('')+'<div style="height:12px"></div><button class="btn" onclick="saveBudgets()">Guardar presupuestos</button></div>'
 +'<div class="card"><b>Copia de seguridad</b><div class="sub">Guarda tus datos en un archivo para no perderlos o pasarlos a otro teléfono.</div><div class="acts"><button class="btn s" onclick="exportData()">Exportar copia</button><button class="btn s o" onclick="$(\'#imp\').click()">Importar copia</button></div><input id="imp" type="file" accept="application/json,.json" style="display:none" onchange="importData(event)"><div class="err" id="msg"></div></div>';
 }
 $('#app').innerHTML=h;
@@ -130,7 +131,7 @@ show('<h2>Nuevo movimiento</h2><div class="seg"><button id="bg" class="on g" onc
 +'<label>Fecha</label><input id="date" type="date" value="'+today()+'"><div class="err" id="err"></div><button class="btn" onclick="saveTx()">Guardar movimiento</button>');
 setT('gasto')}
 function setT(t){draft=t;$('#bg').className=t==='gasto'?'on g':'';$('#bi').className=t==='ingreso'?'on i':'';
-$('#cat').innerHTML=CATS[t].map(function(c){return '<option>'+c+'</option>'}).join('')}
+$('#cat').innerHTML=S.cats[t].map(function(c){return '<option>'+c+'</option>'}).join('')}
 function saveTx(){var a=parseFloat($('#amt').value),d=$('#date').value;
 if(!(a>0)){$('#err').textContent='Escribe un monto mayor que cero.';return}
 if(!d){$('#err').textContent='Elige una fecha.';return}
@@ -150,9 +151,21 @@ if(!(a>0)){$('#err').textContent='Escribe un monto mayor que cero.';return}
 if(sg<0&&a>g.saved){$('#err').textContent='No puedes retirar más de lo ahorrado.';return}
 g.saved+=sg*a;save();closeS();render()}
 function delGoal(id){if(confirm('¿Eliminar esta meta? Lo ahorrado en ella volverá a tu dinero disponible.')){S.goals=S.goals.filter(function(g){return g.id!==id});save();render()}}
-function saveBudgets(){CATS.gasto.forEach(function(c,i){var v=parseFloat($('#bd'+i).value);if(v>0){S.budgets[c]=v}else{delete S.budgets[c]}});save();$('#msg').textContent='';alert('Presupuestos guardados.');go('home')}
+function catCard(t){var n=t==='gasto'?'Categorías de gastos':'Categorías de ingresos';
+return '<div class="card"><b>'+n+'</b>'+S.cats[t].map(function(c,i){return '<div class="row"><div>'+esc(c)+'</div><button class="x" onclick="renCat(\''+t+'\','+i+')" aria-label="Renombrar">✎</button><button class="x" onclick="delCat(\''+t+'\','+i+')" aria-label="Eliminar">✕</button></div>'}).join('')+'<div class="acts"><input id="nc-'+t+'" type="text" maxlength="24" placeholder="Nueva categoría"><button class="btn s" onclick="addCat(\''+t+'\')">Agregar</button></div></div>'}
+function dupCat(t,n,skip){return S.cats[t].some(function(c,i){return i!==skip&&c.toLowerCase()===n.toLowerCase()})}
+function addCat(t){var n=$('#nc-'+t).value.trim();if(!n)return;if(dupCat(t,n,-1)){alert('Esa categoría ya existe.');return}S.cats[t].push(n);save();render()}
+function renCat(t,i){show('<h2>Renombrar categoría</h2><label>Nuevo nombre</label><input id="rn" type="text" maxlength="24" value="'+esc(S.cats[t][i])+'"><div class="err" id="err"></div><button class="btn" onclick="doRen(\''+t+'\','+i+')">Guardar nombre</button>')}
+function doRen(t,i){var n=$('#rn').value.trim(),old=S.cats[t][i];if(!n){$('#err').textContent='Escribe un nombre.';return}
+if(dupCat(t,n,i)){$('#err').textContent='Ya existe otra categoría con ese nombre.';return}
+S.cats[t][i]=n;S.tx.forEach(function(x){if(x.type===t&&x.cat===old)x.cat=n});
+if(t==='gasto'&&S.budgets[old]!==undefined){S.budgets[n]=S.budgets[old];delete S.budgets[old]}
+save();closeS();render()}
+function delCat(t,i){if(S.cats[t].length<=1){alert('Debe quedar al menos una categoría.');return}var c=S.cats[t][i];
+if(confirm('¿Eliminar la categoría “'+c+'”? Los movimientos que ya la tienen la conservarán.')){S.cats[t].splice(i,1);if(t==='gasto')delete S.budgets[c];save();render()}}
+function saveBudgets(){S.cats.gasto.forEach(function(c,i){var v=parseFloat($('#bd'+i).value);if(v>0){S.budgets[c]=v}else{delete S.budgets[c]}});save();$('#msg').textContent='';alert('Presupuestos guardados.');go('home')}
 function exportData(){try{var b=new Blob([JSON.stringify(S)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='mis-finanzas-'+today()+'.json';document.body.appendChild(a);a.click();a.remove()}catch(e){$('#msg').textContent='No se pudo exportar en este navegador.'}}
-function importData(ev){var f=ev.target.files[0];if(!f)return;var r=new FileReader();r.onload=function(){try{var d=JSON.parse(r.result);if(!Array.isArray(d.tx)||!Array.isArray(d.goals))throw 0;if(confirm('Esto reemplazará los datos actuales. ¿Continuar?')){S={tx:d.tx,goals:d.goals,budgets:d.budgets||{}};save();go('home')}}catch(e){$('#msg').textContent='El archivo no es una copia válida.'}};r.readAsText(f);ev.target.value=''}
+function importData(ev){var f=ev.target.files[0];if(!f)return;var r=new FileReader();r.onload=function(){try{var d=JSON.parse(r.result);if(!Array.isArray(d.tx)||!Array.isArray(d.goals))throw 0;if(confirm('Esto reemplazará los datos actuales. ¿Continuar?')){S={tx:d.tx,goals:d.goals,budgets:d.budgets||{},cats:(d.cats&&Array.isArray(d.cats.gasto)&&Array.isArray(d.cats.ingreso))?d.cats:defCats()};save();go('home')}}catch(e){$('#msg').textContent='El archivo no es una copia válida.'}};r.readAsText(f);ev.target.value=''}
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){})}
 render();
 </script>
